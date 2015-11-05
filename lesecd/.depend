@@ -1,0 +1,73 @@
+# -std=gnu99 lesecd.c lexer.c parser.c
+lesecd.o: lesecd.c /usr/include/sys/types.h /usr/include/sys/cdefs.h \
+  /usr/include/machine/endian.h /usr/include/x86/endian.h \
+  /usr/include/sys/_types.h /usr/include/machine/_types.h \
+  /usr/include/x86/_types.h /usr/include/sys/_pthreadtypes.h \
+  /usr/include/sys/_stdint.h /usr/include/sys/select.h \
+  /usr/include/sys/_sigset.h /usr/include/sys/_timeval.h \
+  /usr/include/sys/timespec.h /usr/include/sys/_timespec.h \
+  /usr/include/sys/ioctl.h /usr/include/sys/ioccom.h \
+  /usr/include/sys/filio.h /usr/include/sys/sockio.h \
+  /usr/include/sys/ttycom.h /usr/include/sys/fcntl.h \
+  /usr/include/sys/sysctl.h /usr/include/sys/queue.h \
+  /usr/include/sys/bitstring.h /usr/include/assert.h /usr/include/err.h \
+  /usr/include/errno.h /usr/include/openssl/aes.h \
+  /usr/include/openssl/opensslconf.h /usr/include/stddef.h \
+  /usr/include/sys/_null.h /usr/include/netgraph/ng_message.h \
+  /usr/include/stdio.h /usr/include/stdlib.h /usr/include/string.h \
+  /usr/include/strings.h /usr/include/xlocale/_strings.h \
+  /usr/include/xlocale/_string.h /usr/include/unistd.h \
+  /usr/include/sys/unistd.h /usr/include/bluetooth.h \
+  /usr/include/sys/endian.h /usr/include/sys/socket.h \
+  /usr/include/sys/_iovec.h /usr/include/machine/_align.h \
+  /usr/include/x86/_align.h /usr/include/sys/_sockaddr_storage.h \
+  /usr/include/sys/uio.h /usr/include/sys/un.h /usr/include/netdb.h \
+  /usr/include/netgraph/bluetooth/include/ng_hci.h \
+  /usr/include/netgraph/bluetooth/include/ng_l2cap.h \
+  /usr/include/netgraph/bluetooth/include/ng_btsocket.h \
+  /usr/include/time.h /usr/include/xlocale/_time.h
+lexer.o: lexer.c /usr/include/sys/cdefs.h /usr/include/stdint.h \
+  /usr/include/sys/_types.h /usr/include/machine/_types.h \
+  /usr/include/x86/_types.h /usr/include/machine/_stdint.h \
+  /usr/include/x86/_stdint.h /usr/include/sys/_stdint.h \
+  /usr/include/stdio.h /usr/include/sys/_null.h /usr/include/string.h \
+  /usr/include/strings.h /usr/include/xlocale/_strings.h \
+  /usr/include/xlocale/_string.h /usr/include/errno.h \
+  /usr/include/stdlib.h /usr/include/inttypes.h \
+  /usr/include/machine/_inttypes.h /usr/include/x86/_inttypes.h parser.h \
+  /usr/include/unistd.h /usr/include/sys/types.h \
+  /usr/include/machine/endian.h /usr/include/x86/endian.h \
+  /usr/include/sys/_pthreadtypes.h /usr/include/sys/select.h \
+  /usr/include/sys/_sigset.h /usr/include/sys/_timeval.h \
+  /usr/include/sys/timespec.h /usr/include/sys/_timespec.h \
+  /usr/include/sys/unistd.h
+parser.o: parser.c /usr/include/sys/fcntl.h /usr/include/sys/cdefs.h \
+  /usr/include/sys/_types.h /usr/include/machine/_types.h \
+  /usr/include/x86/_types.h /usr/include/sys/queue.h \
+  /usr/include/bluetooth.h /usr/include/sys/types.h \
+  /usr/include/machine/endian.h /usr/include/x86/endian.h \
+  /usr/include/sys/_pthreadtypes.h /usr/include/sys/_stdint.h \
+  /usr/include/sys/select.h /usr/include/sys/_sigset.h \
+  /usr/include/sys/_timeval.h /usr/include/sys/timespec.h \
+  /usr/include/sys/_timespec.h /usr/include/sys/bitstring.h \
+  /usr/include/sys/endian.h /usr/include/sys/ioctl.h \
+  /usr/include/sys/ioccom.h /usr/include/sys/filio.h \
+  /usr/include/sys/sockio.h /usr/include/sys/ttycom.h \
+  /usr/include/sys/socket.h /usr/include/sys/_iovec.h \
+  /usr/include/machine/_align.h /usr/include/x86/_align.h \
+  /usr/include/sys/_sockaddr_storage.h /usr/include/sys/uio.h \
+  /usr/include/sys/un.h /usr/include/errno.h /usr/include/netdb.h \
+  /usr/include/netgraph/ng_message.h \
+  /usr/include/netgraph/bluetooth/include/ng_hci.h \
+  /usr/include/netgraph/bluetooth/include/ng_l2cap.h \
+  /usr/include/netgraph/bluetooth/include/ng_btsocket.h \
+  /usr/include/time.h /usr/include/sys/_null.h \
+  /usr/include/xlocale/_time.h /usr/include/limits.h \
+  /usr/include/sys/limits.h /usr/include/machine/_limits.h \
+  /usr/include/x86/_limits.h /usr/include/sys/syslimits.h \
+  /usr/include/stdio.h /usr/include/stdlib.h /usr/include/stdarg.h \
+  /usr/include/x86/stdarg.h /usr/include/string.h /usr/include/strings.h \
+  /usr/include/xlocale/_strings.h /usr/include/xlocale/_string.h \
+  /usr/include/syslog.h /usr/include/unistd.h /usr/include/sys/unistd.h \
+  hcsecd.h
+lesecd: /usr/lib/libc.a
