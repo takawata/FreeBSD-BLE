@@ -223,6 +223,7 @@ int attach_service(int s, int device_id )
 				      sizeof(struct service)*(num_service+1));
 		service_ent[num_service].service_id = service_id;
 		service_ent[num_service].driver = &default_driver;
+		service_ent[num_service].sc = NULL;
 		for(i=0; i < num_driver;i++){
 			if(memcmp(&driver_ent[i]->uuid, &uuid, sizeof(uuid))
 			   ==0){
@@ -255,7 +256,7 @@ int notify_handler(unsigned char *buf, int len)
 	  return 0;
 	for(i=0; service_ent[i].service_id != service_id; i++)
 		;
-	if(service_ent[i].driver->notify !=NULL)
+	if(service_ent[i].driver->notify !=NULL && service_ent[i].sc != NULL)
 		service_ent[i].driver->notify(service_ent[i].sc, chara_id,
 					      buf, len);
 	return 0;
@@ -437,7 +438,7 @@ void probe_service(int s, int device_id)
 			srvuuid = uuid_base;
 			srvuuid.time_low = buf[0]|(buf[1]<<8);
 		}else{
-			memcpy(&srvuuid, buf+1, sizeof(srvuuid));
+			memcpy(&srvuuid, buf, sizeof(srvuuid));
 		}
 		sqlite3_bind_blob(update_serv, 1, &srvuuid, sizeof(srvuuid), SQLITE_TRANSIENT);
 		sqlite3_bind_int(update_serv, 2, service_id);
@@ -452,20 +453,20 @@ void probe_service(int s, int device_id)
 void probe_chara(int s, int device_id)
 {
 	sqlite3_stmt *iter_chara, *update_chara;
-	int chara_id, handle, chandle;
+	int chara_id, attribute_id, chandle;
 	unsigned char buf[40];
 	uuid_t srvuuid;
 	int len;
 	int prop;
-	iter_chara = get_stmt("SELECT chara_id,handle FROM ble_chara INNER JOIN ble_attribute on low_attribute_id=ble_attribute.attribute_id  where device_id =$1;");
+	iter_chara = get_stmt("SELECT chara_id,low_attribute_id FROM ble_chara INNER JOIN ble_attribute on low_attribute_id=ble_attribute.attribute_id  where device_id =$1;");
 	update_chara = get_stmt("UPDATE ble_chara SET uuid = $1, property = $2, value_attribute_id = (SELECT attribute_id FROM ble_attribute where handle = $3 and device_id = $4 ) WHERE chara_id = $5;");
 	sqlite3_bind_int(iter_chara, 1, device_id);
 	printf("%p %p\n", iter_chara, update_chara);
 	while(sqlite3_step(iter_chara)==SQLITE_ROW){
 		chara_id = sqlite3_column_int(iter_chara, 0);
-		handle = sqlite3_column_int(iter_chara, 1);
-		printf("%d %d\n", chara_id, handle);
-		len = le_att_read(s,handle, buf, sizeof(buf), 0);
+		attribute_id = sqlite3_column_int(iter_chara, 1);
+		printf("%d %d\n", chara_id, attribute_id);
+		len = le_att_read(s,attribute_id, buf, sizeof(buf), 0);
 		prop = buf[0];
 		chandle = buf[1]|buf[2]<<8;
 		if(len == 5){
