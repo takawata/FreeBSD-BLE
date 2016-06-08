@@ -52,12 +52,15 @@
 #include "hccontrol.h"
 #include "att.h"
 #include "gatt.h"
+#include "uuidbt.h"
 #include <sqlite3.h>
 #include <getopt.h>
 #include "sql.h"
 #include "service.h"
+//00000000-0000-1000-8000-00805F9B34FB
 
-uuid_t uuid_base;
+uuid_t uuid_base = UUID16(0);
+
 int timeout = 30;
 
 
@@ -156,16 +159,25 @@ end:
 }
 
 static int notify_device_id;
-int num_driver;
 int num_service;
-struct service_driver **driver_ent;
 struct service *service_ent;
+struct default_service{
+	uuid_t uuid;
+};
 void default_service_init(struct service *service, int s)
 {
 	static struct sqlite3_stmt *stmt;
 	int chara_id;
 	uuid_t uuid;
-	printf("ID%d\n", service->service_id);
+	char *str;
+	int status;
+	struct default_service *sc;
+	sc = (struct default_service *)service->sc;
+	uuid_to_string(&sc->uuid, &str, &status );
+	printf("%d\n", status);
+	printf("ID%d: %s\n", service->service_id, str);
+	free(str);
+
 	if(stmt == NULL)
 		stmt = get_stmt("SELECT chara_id,uuid FROM ble_chara WHERE service_id = $1;");
 	sqlite3_bind_int(stmt, 1, service->service_id);
@@ -176,14 +188,6 @@ void default_service_init(struct service *service, int s)
 	}
 	sqlite3_reset(stmt);
 	return;
-}
-int register_driver(struct service_driver * drv)
-{
-	num_driver++;
-	driver_ent = realloc(driver_ent, sizeof(struct service_driver *)*
-			     num_driver);
-	driver_ent[num_driver -1] = drv;
-	return 0;
 }
 struct service_driver default_driver =
 {
@@ -199,6 +203,11 @@ int attach_service(int s, int device_id )
 	int i;
 	int error;
 	const void *ptr;
+	struct default_service *dfs;
+	extern struct service_driver __start_driver;
+	extern struct service_driver __stop_driver;  
+	struct service_driver *it;
+	
 	notify_device_id = device_id;
 	stmt = get_stmt("SELECT service_id,uuid from ble_service where device_id=$1;");
 	num_service = 0;
@@ -223,11 +232,12 @@ int attach_service(int s, int device_id )
 				      sizeof(struct service)*(num_service+1));
 		service_ent[num_service].service_id = service_id;
 		service_ent[num_service].driver = &default_driver;
-		service_ent[num_service].sc = NULL;
-		for(i=0; i < num_driver;i++){
-			if(memcmp(&driver_ent[i]->uuid, &uuid, sizeof(uuid))
-			   ==0){
-				service_ent[num_service].driver = driver_ent[i];
+		dfs = service_ent[num_service].sc = malloc(sizeof(struct default_service));
+		dfs->uuid = uuid;
+
+		for(it=&__start_driver; it < &__stop_driver;it++){
+			if(uuid_equal(&it->uuid, &uuid, NULL)){
+				service_ent[num_service].driver = it;
 			}
 		}
 		
@@ -277,6 +287,32 @@ int att_to_handle(int attribute_id, int *hascache)
 
 	return handle;
 }
+ 
+int get_cid_by_uuid16(struct service *service, int uuid16)
+{
+	static sqlite3_stmt *stmt;
+	uuid_t uuid;
+	int cid;
+	int error ;
+	
+	if(stmt == NULL)
+		stmt = get_stmt("SELECT chara_id from ble_chara where service_id = $1 and uuid = $2;");
+	btuuid16(uuid16, &uuid);
+	sqlite3_bind_int(stmt, 1, service->service_id);
+	sqlite3_bind_blob(stmt, 2, &uuid, sizeof(uuid), SQLITE_TRANSIENT);
+	
+	if((error = sqlite3_step(stmt)) != SQLITE_ROW){
+	  printf("%x NOT FOUND\n", uuid16);
+	  cid = -1;
+	  goto end;
+	
+	}
+	cid = sqlite3_column_int(stmt, 0);
+ end:	
+	sqlite3_reset(stmt);
+	return cid;
+}
+
 int le_att_write(int s, int attribute_id, unsigned char *buf, size_t len,int fla)
 {
 	unsigned char cmd[23];
@@ -336,6 +372,11 @@ int le_att_read(int s, int attribute_id, unsigned char *buf, size_t len,int noca
 	cmd[2] = (handle>>8)&0xff;
 	le_write(s, cmd, 3);
 	result_len = le_read(s, cmd, len);
+	if(result_len == -1){
+	  total_len = result_len;
+
+	  goto end;
+	}
 	memcpy(buf, cmd+1, result_len -1);
 	total_len = 0;
 	while(result_len >= mtu && total_len < len){
@@ -359,7 +400,7 @@ int le_att_read(int s, int attribute_id, unsigned char *buf, size_t len,int noca
 		sqlite3_step(cache_update);
 		sqlite3_reset(cache_update);
 	}
-
+ end:
 	return total_len;
 	
 }
@@ -435,8 +476,7 @@ void probe_service(int s, int device_id)
 		request_id = sqlite3_column_int(iter_serv, 1);
 		len = le_att_read(s,request_id, buf, sizeof(buf), 0);
 		if(len == 2){
-			srvuuid = uuid_base;
-			srvuuid.time_low = buf[0]|(buf[1]<<8);
+			btuuid16(buf[0]|(buf[1]<<8), &srvuuid);
 		}else{
 			memcpy(&srvuuid, buf, sizeof(srvuuid));
 		}
@@ -470,8 +510,7 @@ void probe_chara(int s, int device_id)
 		prop = buf[0];
 		chandle = buf[1]|buf[2]<<8;
 		if(len == 5){
-			srvuuid = uuid_base;
-			srvuuid.time_low = buf[3]|(buf[4]<<8);
+			btuuid16(buf[3]|(buf[4]<<8), &srvuuid);
 		}else{
 			memcpy(&srvuuid, buf+3, sizeof(srvuuid));
 		}
@@ -555,8 +594,7 @@ int le_l2connect(bdaddr_t *bd, int securecon)
 				uuid_t huuid;
 				handle = buf[i+1]<<8|buf[i];
 				buid = buf[i+3]<<8|buf[i+2];
-				huuid = uuid_base;
-				huuid.time_low = buid;
+				btuuid16(buid, &huuid);
 				create_attribute(device_id, handle, &huuid);
 				num_handle++;	  
 			}
@@ -579,7 +617,10 @@ skip:
 	while(1){
 		unsigned char buf[50];
 		
-		le_read(s, buf, sizeof(buf));
+		if(le_read(s, buf, sizeof(buf))<=0){
+		  perror("le_read");
+		  break;
+		}
 	}
 	  
 	return 0;
@@ -617,11 +658,10 @@ int main(int argc, char *argv[])
 	}
 	open_db("hoge.db");
 	init_schema();
-
+	create_uuid_func();
 	//gap_probe_init(NULL);
-	uuid_from_string("00000000-0000-1000-8000-00805F9B34FB", &uuid_base, &status);
+	//uuid_from_string("00000000-0000-1000-8000-00805F9B34FB", &uuid_base, &status);
 	install_service_name_table();
-	hogp_register();
 	gethostname(hname, sizeof(hname));
 	len = strlen(hname);
 	if(addr_valid){

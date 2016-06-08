@@ -24,6 +24,7 @@
 #include "gatt.h"
 #include <getopt.h>
 #include "sql.h"
+#include "uuidbt.h"
 
 static char *schema[]={
 	"CREATE TABLE ble_device (device_id INTEGER PRIMARY KEY,addrtype INTEGER, addr BLOB(6), last_attribute INTEGER,UNIQUE (addrtype, addr) ON CONFLICT REPLACE) ;",
@@ -81,7 +82,29 @@ sqlite3_stmt *get_stmt(char *sql)
 	}
 	return stmt;
 }
+void btuuid16_func(sqlite3_context *ctx, int count, sqlite3_value ** val)
+{
+	uint8_t buf[16];
+	uuid_t uuid;
+	btuuid16(sqlite3_value_int(val[0]), &uuid);
+	uuid_enc_bt(buf, &uuid);
+	sqlite3_result_blob(ctx, buf, sizeof(buf), SQLITE_TRANSIENT);
+}
 
+void create_uuid_func()
+{
+
+	sqlite3_create_function(thedb, "btuuid16", 1,
+				SQLITE_UTF8|SQLITE_DETERMINISTIC,
+				NULL, btuuid16_func, NULL, NULL);
+#if 0	
+	sqlite3_exec(thedb, "CREATE TABLE test(uuid BLOB(16));", NULL, NULL, &myerrmsg);
+	//printf("%s\n", myerrmsg);
+	sqlite3_exec(thedb, "INSERT INTO test VALUES (btuuid16(0x1234));", NULL, NULL, &myerrmsg);
+	
+	//printf("%s\n", myerrmsg);
+#endif
+}
 void init_schema()
 {
 	int i = 0;
@@ -117,7 +140,7 @@ int end_attribute_probe(int device_id)
 
 	printf("%s\n", service_term);
 	error = sqlite3_exec(thedb, commit_sql, NULL, NULL, &errmsg);
-
+	
 	return error;
 }
 
@@ -137,30 +160,6 @@ int get_latest_rowid()
 	return row_id;
 }	
 
-int create_service(int device_id)
-{
-	const char search_sql[] = "SELECT handle FROM ble_attribute where device_id = $1 AND ((uuid=(x'0028000000000010800000805F9B34FB') or uuid=(x'0128000000000010800000805F9B34FB')));";
-	static sqlite3_stmt *searchhandle = NULL;
-	int curhandle = 0;
-	int nexthandle = 0;
-	int error;
-	printf("AA\n");
-	if(searchhandle == NULL){
-		sqlite3_prepare_v2(thedb, search_sql, sizeof(search_sql),
-				   &searchhandle, NULL);
-	}
-	sqlite3_bind_int(searchhandle, 1, device_id);
-	sqlite3_step(searchhandle);
-	curhandle = sqlite3_column_int(searchhandle,0);
-	while((error = sqlite3_step(searchhandle)) == SQLITE_ROW){
-		nexthandle = sqlite3_column_int(searchhandle, 0);
-		printf("%x %x\n", curhandle, nexthandle);
-		curhandle = nexthandle;
-	}
-	sqlite3_reset(searchhandle);
-	printf("CC\n");
-	return 0;
-}
 
 int create_attribute(int device_id, int handle, uuid_t *uuid)
 {
@@ -175,6 +174,8 @@ int create_attribute(int device_id, int handle, uuid_t *uuid)
 	sqlite3_bind_blob(createhandle, 3, uuid, sizeof(*uuid), SQLITE_TRANSIENT);
 	sqlite3_step(createhandle);
 	sqlite3_reset(createhandle);
+
+	return 0;
 }
 
 int search_device(int addrtype, bdaddr_t addr)
@@ -228,40 +229,3 @@ int create_device( int addrtype, bdaddr_t addr)
 	
 	return device_id;
 }
-
-#if 0	     
-int main(int argc, char *argv[])
-{
-	int ch;
-	int addr_valid;
-	int sflag = 0;
-	bdaddr_t bd;
-	int device_id;
-	open_db("hoge.db");
-	init_schema();
-	
-	while((ch = getopt(argc, argv, "s") )!= -1){
-		switch(ch){
-		case 's':
-			sflag = 1;
-			break;
-		default:
-			fprintf(stderr, "Usage: %s [-s] bdaddr\n", argv[0]);
-			exit(-1);
-			break;
-		}
-	}
-	argc -= optind;
-	argv += optind;
-	if(argc>0){
-		addr_valid = bt_aton(argv[0],&bd);
-	}
-	device_id = create_device(BDADDR_LE_PUBLIC, bd);
-	printf("%d\n", device_id);
-	if(device_id ==0){
-		device_id = create_device(BDADDR_LE_PUBLIC, bd);
-	}
-	printf("%d\n", device_id);
-	return 0;
-}
-#endif

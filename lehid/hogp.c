@@ -89,6 +89,7 @@
 #include "service.h"
 #include <usbhid.h>
 #include <dev/usb/usbhid.h>
+#include "uuidbt.h"
 #include "hogp.h"
 void hogp_init(struct service *service, int s);
 void hogp_notify(void *sc, int charid, unsigned char *buf, int len);
@@ -101,7 +102,7 @@ void hogp_notify(void *sc, int charid, unsigned char *buf, int len);
 #define HID_BOOT_MOUSE 0x2432
 #define REPORT_REFERENCE 0x2908
 #define CLIENT_CONFIGURATION 0x2902
-extern uuid_t uuid_base;
+
 #define MAXRIDMAP 10
 struct hogp_ridmap{
 	int cid;
@@ -116,20 +117,12 @@ struct hogp_service{
 	struct hogp_ridmap rmap[MAXRIDMAP];
 };
 
-static struct service_driver hogp_driver=
+static struct service_driver  hogp_driver __attribute__((section(("driver")))) __attribute__((used)) =
 {
-
+	.uuid = UUID16(0x1812),
 	.init = hogp_init,
 	.notify = hogp_notify,
 };
-
-
-void hogp_register()
-{
-	hogp_driver.uuid = uuid_base;
-	hogp_driver.uuid.time_low = 0x1812;
-	register_driver(&hogp_driver);
-}
 
 
 static const char *
@@ -216,11 +209,10 @@ void hogp_init(struct service *service, int s)
 	service->sc = serv = malloc(sizeof(*serv));
 	serv->desc = NULL;
 	printf("HOGP:%d\n", service->service_id);
-	uuid = uuid_base;
+
 	if(stmt == NULL)
 		stmt = get_stmt("SELECT chara_id from ble_chara where service_id = $1 and uuid = $2;");
-
-	uuid.time_low = HID_INFORMATION;
+	btuuid16(HID_INFORMATION, &uuid);
 	sqlite3_bind_int(stmt, 1, service->service_id);
 	sqlite3_bind_blob(stmt, 2, &uuid, sizeof(uuid), SQLITE_TRANSIENT);
 	
@@ -238,7 +230,7 @@ void hogp_init(struct service *service, int s)
 	       buf[2], buf[3]);
 	serv->cons = open("/dev/consolectl", O_RDWR);
 	printf("%d\n", serv->cons);
-	uuid.time_low = HID_REPORT_MAP;
+	btuuid16(HID_REPORT_MAP, &uuid);	
 	sqlite3_bind_int(stmt, 1, service->service_id);
 	sqlite3_bind_blob(stmt, 2, &uuid, sizeof(uuid), SQLITE_TRANSIENT);
 	
@@ -255,14 +247,14 @@ void hogp_init(struct service *service, int s)
 	}
 	serv->desc = hid_use_report_desc(serv->hidmap, len);	
 	hid_dump_item(serv->desc);
-	uuid.time_low = HID_REPORT;
+	btuuid16(HID_REPORT, &uuid);
 	sqlite3_bind_int(stmt, 1, service->service_id);
 	sqlite3_bind_blob(stmt, 2, &uuid, sizeof(uuid), SQLITE_TRANSIENT);
 	serv->nrmap = 0;
 	while((error = sqlite3_step(stmt)) == SQLITE_ROW){
 		int report_type;
 		cid = sqlite3_column_int(stmt, 0);
-		uuid.time_low = REPORT_REFERENCE;
+		btuuid16(REPORT_REFERENCE, &uuid);
 		le_char_desc_read(s, cid, &uuid, buf, sizeof(buf), 0);
 		serv->rmap[serv->nrmap].cid = cid;
 		serv->rmap[serv->nrmap].rid = buf[0];
@@ -273,7 +265,7 @@ void hogp_init(struct service *service, int s)
 		if(report_type == 1){
 			buf[0] = 1;
 			buf[1] = 0;
-			uuid.time_low = CLIENT_CONFIGURATION;
+			btuuid16(CLIENT_CONFIGURATION,&uuid);
 			le_char_desc_write(s, cid, &uuid, buf, 2, 0);
 		}
 	}
