@@ -490,6 +490,38 @@ void probe_service(int s, int device_id)
 
 
 }
+void probe_include(int s, int device_id)
+{
+	sqlite3_stmt *iter_include, *update_include;
+	int include_id, attribute_id, lhandle,hhandle;
+	unsigned char buf[40];
+	uuid_t srvuuid;
+	int len;
+	int prop;
+	printf("PROBE_INCLUDE\n");
+	iter_include = get_stmt("SELECT include_id,def_attribute_id FROM ble_include INNER JOIN ble_attribute on def_attribute_id=ble_attribute.attribute_id  where device_id =$1;");
+	update_include = get_stmt("UPDATE ble_include SET low_attribute_id = (SELECT attribute_id FROM ble_attribute where handle = $1 and device_id = $2 ), high_attribute_id= (SELECT attribute_id FROM ble_attribute where handle = $3 and device_id = $2 ) WHERE include_id = $4;");
+	sqlite3_bind_int(iter_include, 1, device_id);
+	printf("%p %p\n", iter_include, update_include);
+	while(sqlite3_step(iter_include)==SQLITE_ROW){
+		include_id = sqlite3_column_int(iter_include, 0);
+		attribute_id = sqlite3_column_int(iter_include, 1);
+		printf("%d %d\n", include_id, attribute_id);
+		len = le_att_read(s,attribute_id, buf, sizeof(buf), 0);
+		lhandle = buf[0]|buf[1]<<8;
+		hhandle = buf[2]|buf[3]<<8;		
+		sqlite3_bind_int(update_include, 1, lhandle);
+		sqlite3_bind_int(update_include, 2, device_id);
+		sqlite3_bind_int(update_include, 3, hhandle);
+		sqlite3_bind_int(update_include, 4, include_id);		
+		sqlite3_step(update_include);
+		sqlite3_reset(update_include);
+	}
+	sqlite3_finalize(update_include);
+	sqlite3_finalize(iter_include);
+
+	
+}
 void probe_chara(int s, int device_id)
 {
 	sqlite3_stmt *iter_chara, *update_chara;
@@ -612,7 +644,8 @@ int le_l2connect(bdaddr_t *bd, int securecon)
 	end_attribute_probe(device_id);
 	probe_service(s, device_id);
 	probe_chara(s, device_id);
-skip:	
+	probe_include(s, device_id);
+skip:
 	attach_service(s, device_id);
 	while(1){
 		unsigned char buf[50];
