@@ -195,7 +195,66 @@ void hid_dump_item(report_desc_t rd)
 		}
 	}
 }
+/*
+ * Create temporary table of services included.
+ */
+void hogp_service_include(struct service *service)
+{
+	sqlite3_stmt *stmt;
+	stmt = get_stmt("CREATE TEMPORARY TABLE iservice AS select ble_service.service_id from ble_service INNER JOIN ble_include ON ble_service.low_attribute_id = ble_include.low_attribute_id where ble_include.service_id = $1;");
+	sqlite3_bind_int(stmt,1,service->service_id);
+	printf("STMT1%p\n", stmt);
+	sqlite3_step(stmt);
+	sqlite3_finalize(stmt);
+	stmt = get_stmt("INSERT INTO iservice VALUES ($1);");
+	sqlite3_bind_int(stmt, 1, service->service_id);
+	sqlite3_step(stmt);
+	sqlite3_finalize(stmt);
+}
 
+/*
+ * Create temporaly table of characteristic UUID 
+ * which should be treated as REPORT.
+ */
+void hogp_ext_ref(struct service *service, int mapcid, int s)
+{
+	sqlite3_stmt *stmt1,*stmt2;
+	uuid_t uuid;
+	unsigned char buf[50];
+	int len;
+	int attr_id;
+
+	stmt1 = get_stmt("CREATE TEMPORARY TABLE reftable(uuid BLOB(16)) ;");
+	sqlite3_step(stmt1);
+	sqlite3_finalize(stmt1);
+
+	stmt1 = get_stmt("INSERT INTO reftable VALUES ($1);");
+	/*HID report */
+	btuuid16(HID_REPORT, &uuid);
+	sqlite3_bind_blob(stmt1, 1, &uuid, sizeof(uuid), SQLITE_TRANSIENT);
+	sqlite3_step(stmt1);
+	sqlite3_reset(stmt1);
+	/*Read External Report Reference and insert into table*/
+	btuuid16(0x2907, &uuid);
+	stmt2 = get_stmt("SELECT attribute_id FROM ble_attribute , (SELECT low_attribute_id, high_attribute_id from ble_chara WHERE chara_id=$1) AS c WHERE (attribute_id BETWEEN c.low_attribute_id AND c.high_attribute_id) AND uuid = $2 ;");
+	sqlite3_bind_int(stmt2, 1 , mapcid);
+	sqlite3_bind_blob(stmt2, 2, &uuid, sizeof(uuid), SQLITE_TRANSIENT);
+	while(sqlite3_step(stmt2) == SQLITE_ROW){
+		attr_id =sqlite3_column_int(stmt2, 0);
+		len = le_att_read(s, attr_id, buf, sizeof(buf), 0);
+		if(len == 2){
+			btuuid16(buf[0]|buf[1]<<8, &uuid);
+		}else if(len== 16){
+			memcpy(&uuid, buf, sizeof(uuid));
+		}
+		sqlite3_bind_blob(stmt1, 1, &uuid, sizeof(uuid), SQLITE_TRANSIENT);
+		sqlite3_step(stmt1);
+		sqlite3_reset(stmt1);
+	}
+	sqlite3_finalize(stmt1);
+	sqlite3_finalize(stmt2);
+
+}
 void hogp_init(struct service *service, int s)
 {
 	unsigned char buf[40];
@@ -204,14 +263,15 @@ void hogp_init(struct service *service, int s)
 	int len;
 	hid_init(NULL);
 	int error;
-	static sqlite3_stmt *stmt;
+	sqlite3_stmt *stmt;
 	struct hogp_service *serv;
 	service->sc = serv = malloc(sizeof(*serv));
 	serv->desc = NULL;
 	printf("HOGP:%d\n", service->service_id);
+	hogp_service_include(service);
 
-	if(stmt == NULL)
-		stmt = get_stmt("SELECT chara_id from ble_chara where service_id = $1 and uuid = $2;");
+
+	stmt = get_stmt("SELECT chara_id from ble_chara where service_id = $1 and uuid = $2;");
 	btuuid16(HID_INFORMATION, &uuid);
 	sqlite3_bind_int(stmt, 1, service->service_id);
 	sqlite3_bind_blob(stmt, 2, &uuid, sizeof(uuid), SQLITE_TRANSIENT);
@@ -240,16 +300,19 @@ void hogp_init(struct service *service, int s)
 	}
 	cid = sqlite3_column_int(stmt, 0);
 	sqlite3_reset(stmt);
+	hogp_ext_ref(service, cid, s);
 	len = le_char_read(s, cid, serv->hidmap, sizeof(serv->hidmap), 0);
 	if(len < 0){
 		fprintf(stderr, "Cannot read REPORT MAP %d \n", len);
 		return;
 	}
+
 	serv->desc = hid_use_report_desc(serv->hidmap, len);	
 	hid_dump_item(serv->desc);
-	btuuid16(HID_REPORT, &uuid);
-	sqlite3_bind_int(stmt, 1, service->service_id);
-	sqlite3_bind_blob(stmt, 2, &uuid, sizeof(uuid), SQLITE_TRANSIENT);
+	sqlite3_finalize(stmt);
+
+	/*report characteristics from associated services*/
+	stmt = get_stmt("SELECT chara_id FROM ble_chara INNER JOIN reftable ON ble_chara.uuid=reftable.uuid INNER JOIN iservice ON iservice.service_id=ble_chara.service_id;");
 	serv->nrmap = 0;
 	while((error = sqlite3_step(stmt)) == SQLITE_ROW){
 		int report_type;
@@ -269,8 +332,15 @@ void hogp_init(struct service *service, int s)
 			le_char_desc_write(s, cid, &uuid, buf, 2, 0);
 		}
 	}
-	sqlite3_reset(stmt);
+	sqlite3_finalize(stmt);
 	printf("%d\n", serv->nrmap);
+	stmt = get_stmt("DROP TABLE iservice;");
+	sqlite3_step(stmt);
+	sqlite3_finalize(stmt);
+	stmt = get_stmt("DROP TABLE reftable;");
+	sqlite3_step(stmt);
+	sqlite3_finalize(stmt);
+
 	return;
 }
 void hogp_process_report(struct hogp_service *serv, unsigned char *buf)
