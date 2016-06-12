@@ -255,6 +255,7 @@ void hogp_ext_ref(struct service *service, int mapcid, int s)
 	sqlite3_finalize(stmt2);
 
 }
+
 void hogp_init(struct service *service, int s)
 {
 	unsigned char buf[40];
@@ -326,10 +327,7 @@ void hogp_init(struct service *service, int s)
 		       buf[0], buf[1]);
 		serv->nrmap++;
 		if(report_type == 1){
-			buf[0] = 1;
-			buf[1] = 0;
-			btuuid16(CLIENT_CONFIGURATION,&uuid);
-			le_char_desc_write(s, cid, &uuid, buf, 2, 0);
+			register_notify(cid, service, s);
 		}
 	}
 	sqlite3_finalize(stmt);

@@ -249,27 +249,64 @@ int attach_service(int s, int device_id )
 		service_ent[i].driver->init(&service_ent[i], s);
 	} 
 }
+
+struct notify_dispatcher
+{
+	uint16_t handle;
+	int cid;
+	struct service *serv;
+}*dispatcher;
+int numdispatcher;
+
+int register_notify(int cid, struct service *serv, int s)
+{
+	static sqlite3_stmt *queryhandle;
+	struct notify_dispatcher *d;
+	unsigned char buf[50];
+	uuid_t uuid;
+	if(queryhandle == NULL)
+		queryhandle = get_stmt("SELECT handle from ble_attribute INNER JOIN ble_chara ON value_attribute_id = attribute_id where chara_id = $1;");
+
+	if(queryhandle == NULL){
+		printf("QUERYHANDLE\n" );
+		return -1;
+	}
+	numdispatcher++;
+	dispatcher = realloc(dispatcher, numdispatcher*(sizeof(*dispatcher)));
+	if(dispatcher == NULL){
+		printf("ENOMEM\n");
+		return -1;
+	}
+	d = &dispatcher[numdispatcher -1];
+	d->cid = cid;
+	d->serv =serv;
+	sqlite3_bind_int(queryhandle, 1, cid);
+	sqlite3_step(queryhandle);
+	d->handle = sqlite3_column_int(queryhandle, 0);
+	sqlite3_reset(queryhandle);
+			
+	buf[0] = 1;
+	buf[1] = 0;
+	btuuid16(0x2902,&uuid);
+	le_char_desc_write(s, cid, &uuid, buf, 2, 0);
+	
+	return 0;
+}
+
 int notify_handler(unsigned char *buf, int len)
 {
-	static sqlite3_stmt *querychara;
-	int service_id, chara_id;
 	int i;
-	if(querychara==NULL)
-		querychara = get_stmt("SELECT service_id,chara_id FROM ble_chara  JOIN ble_attribute ON ble_attribute.attribute_id = ble_chara.value_attribute_id where handle=$1 and device_id=$2;");
-	sqlite3_bind_int(querychara, 1, buf[0]|(buf[1]<<8));
-	sqlite3_bind_int(querychara, 2, notify_device_id);
-	sqlite3_step(querychara);
-	service_id = sqlite3_column_int(querychara, 0);
-	chara_id = sqlite3_column_int(querychara,1);
-	sqlite3_reset(querychara);
-	if(service_ent == NULL)
-	  return 0;
-	for(i=0; service_ent[i].service_id != service_id; i++)
-		;
-	if(service_ent[i].driver->notify !=NULL && service_ent[i].sc != NULL)
-		service_ent[i].driver->notify(service_ent[i].sc, chara_id,
-					      buf, len);
-	return 0;
+	struct service *serv;
+	for(i=0; i < numdispatcher; i++){
+		if(dispatcher[i].handle == (buf[0]|(buf[1]<<8))){
+			serv = dispatcher[i].serv;
+			if(serv->driver != NULL && serv->driver->notify!=NULL
+			   && serv->sc != NULL)
+				serv->driver->notify(serv->sc,
+						     dispatcher[i].cid,
+						     buf, len);
+		}
+	}
 }
 
 int att_to_handle(int attribute_id, int *hascache)
@@ -433,7 +470,7 @@ int le_char_desc_read(int s, int chara_id, uuid_t *descid, unsigned char *buf, s
 int le_char_desc_write(int s, int chara_id, uuid_t *descid, unsigned char *buf, size_t len, int flag)
 {
 	int attr_id = chardesc_to_attr(chara_id, descid);
-	
+
 	return (attr_id==-1)?-1:le_att_write(s, attr_id, buf, len, flag);
 	
 }

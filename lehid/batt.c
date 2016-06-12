@@ -41,7 +41,7 @@ static struct service_driver batt_driver __attribute__((used)) __attribute__((se
  
 void batt_notify(void *sc, int charid, unsigned char *buf, size_t len)
 {
-	printf("Notify GOT %d\n", len);
+	printf("Battery Level changed %d%%\n", buf[2]);
 }
 void batt_init(struct service *service, int s)
 {
@@ -57,13 +57,11 @@ void batt_init(struct service *service, int s)
 	
 	printf("BATT:%d\n",  service->service_id);
 	cid = get_cid_by_uuid16(service, 0x2a19);
+	
 	len = le_char_read(s, cid, buf, sizeof(buf), 1);
 	printf("%d\n", len);
 	printf("Battery level %d%%\n", buf[0]);
-	btuuid16(0x2902, &uuid);
-	buf[0] = 1;
-	buf[1] = 0;
-	le_char_desc_write(s, cid, &uuid, buf, 2, 0);
+	register_notify(cid, service, s);
 
 	return ;
 }
