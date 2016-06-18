@@ -17,12 +17,12 @@
 #define L2CAP_SOCKET_CHECKED
 #include <bluetooth.h>
 #include "hccontrol.h"
-#include "att.h"
 #include "gatt.h"
 #include <sqlite3.h>
 #include <getopt.h>
 #include "sql.h"
 #include "service.h"
+#include "att.h"
 #include <usbhid.h>
 #include <dev/usb/usbhid.h>
 #include "hogp.h"

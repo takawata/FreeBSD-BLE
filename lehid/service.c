@@ -18,13 +18,13 @@
 #define L2CAP_SOCKET_CHECKED
 #include <bluetooth.h>
 #include "hccontrol.h"
-#include "att.h"
 #include "gatt.h"
 #include "uuidbt.h"
 #include <sqlite3.h>
 #include <getopt.h>
 #include "sql.h"
 #include "service.h"
+#include "att.h"
 
 
 static int num_service;
@@ -38,7 +38,7 @@ void default_service_init(struct service *service, int s)
 	int chara_id;
 	uuid_t uuid;
 	char *str;
-	int status;
+	uint32_t status;
 	struct default_service *sc;
 	sc = (struct default_service *)service->sc;
 	uuid_to_string(&sc->uuid, &str, &status );
@@ -51,7 +51,7 @@ void default_service_init(struct service *service, int s)
 	sqlite3_bind_int(stmt, 1, service->service_id);
 	while(sqlite3_step(stmt) == SQLITE_ROW){
 		chara_id = sqlite3_column_int(stmt, 0);
-		memcpy(&uuid, sqlite3_column_blob(stmt, 1), sizeof(uuid));
+		my_column_uuid(stmt, 1, &uuid);
 		printf("%x %x\n", chara_id, uuid.time_low);
 	}
 	sqlite3_reset(stmt);
@@ -89,12 +89,9 @@ int attach_service(int s, int device_id )
 		if(error != SQLITE_ROW)
 			break;
 		service_id = sqlite3_column_int(stmt, 0);
-		ptr = sqlite3_column_blob(stmt, 1);
-		if(ptr != NULL)
-			memcpy(&uuid, ptr, sizeof(uuid));
-		else{
-			printf("Pointer is null");
-		}
+		error = my_column_uuid(stmt, 1, &uuid);
+		if(error)
+			printf("UUID column invalid\n");
 
 		service_ent = realloc(service_ent,
 				      sizeof(struct service)*(num_service+1));
@@ -115,5 +112,7 @@ int attach_service(int s, int device_id )
 	sqlite3_finalize(stmt);
 	for(i = 0 ; i < num_service; i++){
 		service_ent[i].driver->init(&service_ent[i], s);
-	} 
+	}
+
+	return 0;
 }

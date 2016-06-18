@@ -1,3 +1,5 @@
+#ifndef SERVICE_H_
+#define SERVICE_H_
 struct service;
 struct service_driver;
 typedef void (*init_func)(struct service *, int sock);
@@ -13,3 +15,6 @@ struct service{
 	struct service_driver *driver;
 };
 
+int attach_service(int s, int device_id );
+
+#endif

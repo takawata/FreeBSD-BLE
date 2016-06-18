@@ -16,9 +16,19 @@ void uuid_enc_bt(void *buf, const uuid_t *uuid)
 		d[5-i] = uuid->node[i];
 }
 
+void btuuiddec(void * buf, int len,uuid_t *uuid)
+{
+	uint8_t *b = buf;
+	if(len == 2){
+		btuuid16(b[0]|b[1]<<8, uuid);
+	}else if(len== 16){
+		uuid_dec_bt(buf, uuid);
+	}
+}
+	       
 void uuid_dec_bt( const void *buf, uuid_t *uuid)
 {
-	uint8_t *p = buf;
+	uint8_t *p = (uint8_t *)buf;
 	int i;
 
 	uuid->time_low = le32dec(p+12);

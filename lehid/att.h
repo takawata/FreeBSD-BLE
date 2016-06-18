@@ -1,3 +1,5 @@
+#ifndef ATT_H_
+#define ATT_H_
 #define ATT_OP_ERR 1
 #define ATT_OP_MTU_REQ 2
 #define ATT_OP_MTU_RES 3
@@ -29,3 +31,10 @@
 int le_write(int s,unsigned char *buf,size_t size);
 int le_read(int s, unsigned char *buf, size_t size);
 int le_att_read(int s, int attribute_id, unsigned char *buf, size_t len, int nocache);
+int le_char_read(int s, int chara_id, unsigned char *buf, size_t len, int nocache);
+int le_char_desc_read(int s, int chara_id, uuid_t *descid, unsigned char *buf, size_t len, int nocache);
+int le_char_desc_write(int s, int chara_id, uuid_t *descid, unsigned char *buf, size_t len, int nocache);
+int get_cid_by_uuid16(struct service *service, int cid);
+
+
+#endif

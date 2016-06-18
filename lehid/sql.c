@@ -20,7 +20,6 @@
 #include <bluetooth.h>
 #include <sqlite3.h>
 #include "hccontrol.h"
-#include "att.h"
 #include "gatt.h"
 #include <getopt.h>
 #include "sql.h"
@@ -39,7 +38,7 @@ static char *schema[]={
 	END;",
 
 	"CREATE TRIGGER insert_ble_service AFTER INSERT ON ble_attribute\
-	WHEN new.uuid=(x'0028000000000010800000805F9B34FB') or new.uuid=(x'0128000000000010800000805F9B34FB')\
+	WHEN new.uuid=btuuid16(0x2800) or new.uuid=btuuid16(0x2801)\
 	BEGIN \
 		UPDATE ble_chara SET high_attribute_id=new.attribute_id-1 WHERE \
 			(service_id = (SELECT max(service_id) FROM ble_service) AND (chara_id = (SELECT max(chara_id) FROM ble_chara))); \
@@ -48,14 +47,14 @@ static char *schema[]={
 		INSERT INTO ble_service (device_id, low_attribute_id) VALUES (new.device_id, new.attribute_id) ; \
 	END;",
 	"CREATE TRIGGER insert_ble_include AFTER INSERT ON ble_attribute\
-	WHEN new.uuid=(x'0228000000000010800000805F9B34FB') \
+	WHEN new.uuid=btuuid16(0x2802) \
 	BEGIN \
 		INSERT INTO ble_include  (service_id, def_attribute_id) \
         		VALUES ((SELECT max(service_id) FROM ble_service),\
 		 new.attribute_id) ; \
         END;",
 	"CREATE TRIGGER insert_ble_chara AFTER INSERT ON ble_attribute\
-	WHEN new.uuid=(x'0328000000000010800000805F9B34FB') \
+	WHEN new.uuid=btuuid16(0x2803) \
 	BEGIN \
 		UPDATE ble_chara SET high_attribute_id=new.attribute_id-1 WHERE \
 			(service_id = (SELECT max(service_id) FROM ble_service) AND (chara_id = (SELECT max(chara_id) FROM ble_chara))); \
@@ -77,6 +76,9 @@ sqlite3_stmt *get_stmt(char *sql)
 	int error;
 	error = sqlite3_prepare_v2(thedb, sql,strlen(sql),
 				   &stmt,  NULL);
+#ifdef DEBUG	
+	printf("%s %s %p\n", sql, sqlite3_errstr(error));
+#endif	
 	if(error != SQLITE_OK){
 		return NULL;
 	}
@@ -87,6 +89,9 @@ void btuuid16_func(sqlite3_context *ctx, int count, sqlite3_value ** val)
 	uint8_t buf[16];
 	uuid_t uuid;
 	btuuid16(sqlite3_value_int(val[0]), &uuid);
+#ifdef DEBUG	
+	printf("BTUUID16 SQL\n");
+#endif	
 	uuid_enc_bt(buf, &uuid);
 	sqlite3_result_blob(ctx, buf, sizeof(buf), SQLITE_TRANSIENT);
 }
@@ -171,7 +176,7 @@ int create_attribute(int device_id, int handle, uuid_t *uuid)
 	}
 	sqlite3_bind_int(createhandle, 1, device_id);
 	sqlite3_bind_int(createhandle, 2, handle);
-	sqlite3_bind_blob(createhandle, 3, uuid, sizeof(*uuid), SQLITE_TRANSIENT);
+	my_bind_uuid(createhandle, 3, uuid);
 	sqlite3_step(createhandle);
 	sqlite3_reset(createhandle);
 
@@ -198,6 +203,26 @@ int search_device(int addrtype, bdaddr_t addr)
 	}
 	sqlite3_reset(searchhandle);
 	return device_id;
+}
+
+int my_bind_uuid(sqlite3_stmt *stmt, int col, uuid_t *uuid)
+{
+	char buf[16];
+	uuid_enc_bt(buf, uuid);
+
+	return sqlite3_bind_blob(stmt, col, buf, sizeof(buf), SQLITE_TRANSIENT);
+}
+
+int my_column_uuid(sqlite3_stmt *stmt, int col,uuid_t *uuid)
+{
+	void *data;
+	if(sqlite3_column_bytes(stmt, col)!= 16){
+		printf("UUID LEN INVALID");
+		return -1;
+	}
+	uuid_dec_bt(sqlite3_column_blob(stmt, col), uuid);
+	
+	return 0;
 }
 int create_device( int addrtype, bdaddr_t addr)
 {

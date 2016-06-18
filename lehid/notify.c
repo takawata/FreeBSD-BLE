@@ -18,13 +18,13 @@
 #define L2CAP_SOCKET_CHECKED
 #include <bluetooth.h>
 #include "hccontrol.h"
-#include "att.h"
 #include "gatt.h"
 #include "uuidbt.h"
 #include <sqlite3.h>
 #include <getopt.h>
 #include "sql.h"
 #include "service.h"
+#include "att.h"
 #include "notify.h"
 
 struct notify_dispatcher
@@ -84,4 +84,5 @@ int notify_handler(unsigned char *buf, int len)
 						     buf, len);
 		}
 	}
+	return 0;
 }

@@ -9,7 +9,6 @@
 #include <uuid.h>
 #include <sqlite3.h>
 #include "sql.h"
-#include "att.h"
 #include "gatt.h"
 
 #define MAX_ATTRIBUTE_LEN 512

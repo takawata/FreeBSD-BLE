@@ -17,13 +17,15 @@
 #define L2CAP_SOCKET_CHECKED
 #include <bluetooth.h>
 #include "hccontrol.h"
-#include "att.h"
 #include "gatt.h"
 #include <sqlite3.h>
 #include <getopt.h>
 #include "sql.h"
 #include "service.h"
 #include "uuidbt.h"
+#include "notify.h"
+#include "att.h"
+
 
 extern uuid_t uuid_base;
 struct batt_service{

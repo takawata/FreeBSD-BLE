@@ -81,18 +81,21 @@
 #define L2CAP_SOCKET_CHECKED
 #include <bluetooth.h>
 #include "hccontrol.h"
-#include "att.h"
 #include "gatt.h"
 #include <sqlite3.h>
 #include <getopt.h>
 #include "sql.h"
 #include "service.h"
+#include "att.h"
+#include "notify.h"
 #include <usbhid.h>
 #include <dev/usb/usbhid.h>
 #include "uuidbt.h"
 #include "hogp.h"
+
+
 void hogp_init(struct service *service, int s);
-void hogp_notify(void *sc, int charid, unsigned char *buf, int len);
+void hogp_notify(void *sc, int charid, unsigned char *buf, size_t len);
 #define HID_INFORMATION 0x2a4a 
 #define HID_REPORT_MAP 0x2a4b
 #define HID_CONTROL_POINT 0x2a4c
@@ -231,23 +234,19 @@ void hogp_ext_ref(struct service *service, int mapcid, int s)
 	stmt1 = get_stmt("INSERT INTO reftable VALUES ($1);");
 	/*HID report */
 	btuuid16(HID_REPORT, &uuid);
-	sqlite3_bind_blob(stmt1, 1, &uuid, sizeof(uuid), SQLITE_TRANSIENT);
+	my_bind_uuid(stmt1, 1, &uuid);
 	sqlite3_step(stmt1);
 	sqlite3_reset(stmt1);
 	/*Read External Report Reference and insert into table*/
 	btuuid16(0x2907, &uuid);
 	stmt2 = get_stmt("SELECT attribute_id FROM ble_attribute , (SELECT low_attribute_id, high_attribute_id from ble_chara WHERE chara_id=$1) AS c WHERE (attribute_id BETWEEN c.low_attribute_id AND c.high_attribute_id) AND uuid = $2 ;");
 	sqlite3_bind_int(stmt2, 1 , mapcid);
-	sqlite3_bind_blob(stmt2, 2, &uuid, sizeof(uuid), SQLITE_TRANSIENT);
+	my_bind_uuid(stmt2, 2, &uuid);
 	while(sqlite3_step(stmt2) == SQLITE_ROW){
 		attr_id =sqlite3_column_int(stmt2, 0);
 		len = le_att_read(s, attr_id, buf, sizeof(buf), 0);
-		if(len == 2){
-			btuuid16(buf[0]|buf[1]<<8, &uuid);
-		}else if(len== 16){
-			memcpy(&uuid, buf, sizeof(uuid));
-		}
-		sqlite3_bind_blob(stmt1, 1, &uuid, sizeof(uuid), SQLITE_TRANSIENT);
+		btuuiddec(buf, len, &uuid);
+		my_bind_uuid(stmt1, 1, &uuid);
 		sqlite3_step(stmt1);
 		sqlite3_reset(stmt1);
 	}
@@ -275,7 +274,7 @@ void hogp_init(struct service *service, int s)
 	stmt = get_stmt("SELECT chara_id from ble_chara where service_id = $1 and uuid = $2;");
 	btuuid16(HID_INFORMATION, &uuid);
 	sqlite3_bind_int(stmt, 1, service->service_id);
-	sqlite3_bind_blob(stmt, 2, &uuid, sizeof(uuid), SQLITE_TRANSIENT);
+	my_bind_uuid(stmt, 2, &uuid);
 	
 	if((error = sqlite3_step(stmt)) != SQLITE_ROW){
 		fprintf(stderr, "HID Information not found %d\n", error);
@@ -293,7 +292,7 @@ void hogp_init(struct service *service, int s)
 	printf("%d\n", serv->cons);
 	btuuid16(HID_REPORT_MAP, &uuid);	
 	sqlite3_bind_int(stmt, 1, service->service_id);
-	sqlite3_bind_blob(stmt, 2, &uuid, sizeof(uuid), SQLITE_TRANSIENT);
+	my_bind_uuid(stmt, 2, &uuid);
 	
 	if((error = sqlite3_step(stmt)) != SQLITE_ROW){
 		fprintf(stderr, "HID REPORT MAP not found %d\n", error);
@@ -573,7 +572,7 @@ void hogp_process_report(struct hogp_service *serv, unsigned char *buf)
 
 	
 }
-void hogp_notify(void *sc, int charid, unsigned char *buf, int len)
+void hogp_notify(void *sc, int charid, unsigned char *buf, size_t len)
 {
 
 	int i;
