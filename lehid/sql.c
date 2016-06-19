@@ -197,7 +197,6 @@ int search_device(int addrtype, bdaddr_t addr)
 	sqlite3_bind_int(searchhandle, 1, addrtype);
 	sqlite3_bind_blob(searchhandle, 2, &addr, sizeof(addr), SQLITE_TRANSIENT);
 	if((error = sqlite3_step(searchhandle)) == SQLITE_ROW){
-		printf("HOGEHOGE\n");
 		device_id = sqlite3_column_int(searchhandle, 0);
 		printf("DEVICE_ID %d\n", device_id);
 	}

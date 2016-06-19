@@ -238,7 +238,6 @@ int le_l2connect(bdaddr_t *bd, int securecon)
 #endif	
 	device_id = search_device(l2c.l2cap_bdaddr_type, l2c.l2cap_bdaddr);
 	if(device_id != 0){
-		printf("ATTRIBUTE %d\n",device_id);
 		goto skip;
 	}
 	device_id = create_device(l2c.l2cap_bdaddr_type, l2c.l2cap_bdaddr);
