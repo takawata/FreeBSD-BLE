@@ -8,6 +8,7 @@
 #include <bluetooth.h>
 #include <uuid.h>
 #include <sqlite3.h>
+#include "uuidbt.h"
 #include "sql.h"
 #include "gatt.h"
 
@@ -46,9 +47,8 @@ void install_service_name_table()
 	
 	stmt = get_stmt("INSERT INTO service_name (uuid, name) VALUES ($1 , $2) ");
 	for(e = srvent; e->name != NULL; e++){
-		uuid = uuid_base;
-		uuid.time_low = e->uuid;
-		sqlite3_bind_blob(stmt, 1, &uuid,  sizeof(uuid), SQLITE_TRANSIENT);
+		btuuid16(e->uuid, &uuid);
+		my_bind_uuid(stmt, 1, &uuid);
 		sqlite3_bind_text(stmt, 2, e->name, strlen(e->name), SQLITE_STATIC);
 		error = sqlite3_step(stmt);
 		sqlite3_reset(stmt);
