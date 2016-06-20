@@ -77,10 +77,7 @@ void rcs_init(struct service *service, int s)
 	printf("RCS:%d\n",  service->service_id);
 	cid = get_cid_by_uuid16(service, 0x2a53);
 	if(cid !=-1){
-	  btuuid16(0x2902, &uuid);
-	  buf[0] = 1;
-	  buf[1] = 0;
-	  le_char_desc_write(s, cid, &uuid, buf, 2, 0);
+		register_notify(cid, service, s);
 	}
 	cid = get_cid_by_uuid16(service, 0x2a54);
 	if(cid != -1){
@@ -93,6 +90,6 @@ void rcs_init(struct service *service, int s)
 	  le_char_read(s, cid, buf, sizeof(buf), 0);
 	  printf("SensorLocation %d", buf[0]);
 	}
-	
+
 	return ;
 }
