@@ -38,11 +38,6 @@ int open_socket(char *node)
 	addr.hci_family = AF_BLUETOOTH;
 	
 	strncpy(addr.hci_node, node, sizeof(addr.hci_node));
-	if (bind(s, (struct sockaddr *) &addr, sizeof(addr)) < 0)
-		err(2, "Could not bind socket, node=%s", node);
-	
-	if (connect(s, (struct sockaddr *) &addr, sizeof(addr)) < 0)
-		err(3, "Could not connect socket, node=%s", node);
 
 	slen = sizeof(flt);
         if (getsockopt(s, SOL_HCI_RAW, SO_HCI_RAW_FILTER,  &flt, &slen) < 0) {
