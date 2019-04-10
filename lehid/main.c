@@ -54,9 +54,11 @@
 #include "uuidbt.h"
 #include <sqlite3.h>
 #include <getopt.h>
+#include <sys/event.h>
 #include "sql.h"
 #include "service.h"
 #include "att.h"
+#include "event.h"
 
 //00000000-0000-1000-8000-00805F9B34FB
 
@@ -199,20 +201,59 @@ int attribute_init(int s, int device_id)
 	return 0;
 }
 
-int le_l2connect(bdaddr_t *bd, int securecon)
+/*
+ * STDIN input event.
+ */
+int cmdhandler(int c, int kqflag, void * data)
+{
+	unsigned char buf[50];
+	int len;
+	printf("%d\n", kqflag);
+	if(kqflag == EV_EOF){
+
+		deregister_event(c);
+	}
+	len =  read(0, buf, sizeof(buf) -1);
+	printf("%d\n",len);
+	if(len <= 0){
+
+		deregister_event(c);		
+	}
+	buf[len] = 0;
+	//process_command(buf);
+	
+	return 0;
+}
+
+/* 
+ *LE packet incoming event.
+ */
+int le_event(int s, int kqflag, void *data)
+{
+	unsigned char buf[50];
+	if(kqflag == EV_EOF){
+		printf("EOF GET\n");
+		exit(-1);
+	}
+	le_read_one(s, buf,sizeof(buf));
+
+	return 0;
+}
+
+int le_l2connect(bdaddr_t *bd, int securecon, int israndom)
 {
 	struct sockaddr_l2cap l2c;
 	int s;
 	uint16_t enc;
 	int device_id;
-	
+	static struct  eventhandler evh, cmd;
 	s = socket(PF_BLUETOOTH, SOCK_SEQPACKET,
 		   BLUETOOTH_PROTO_L2CAP);  
 	l2c.l2cap_len = sizeof(l2c);
 	l2c.l2cap_family = AF_BLUETOOTH;
 	l2c.l2cap_psm = 0;
 	l2c.l2cap_cid = NG_L2CAP_ATT_CID;
-	l2c.l2cap_bdaddr_type = BDADDR_LE_PUBLIC;
+	l2c.l2cap_bdaddr_type = (israndom)? BDADDR_LE_RANDOM : BDADDR_LE_PUBLIC;
 	bcopy(bd, &l2c.l2cap_bdaddr, sizeof(*bd));
 	
 	printf("CONNECT\n");
@@ -248,15 +289,14 @@ int le_l2connect(bdaddr_t *bd, int securecon)
 	probe_include(s, device_id);
 skip:
 	attach_service(s, device_id);
-	while(1){
-		unsigned char buf[50];
-		
-		if(le_read(s, buf, sizeof(buf))<=0){
-		  perror("le_read");
-		  break;
-		}
-	}
-	  
+	evh.handler = le_event;
+	evh.data = NULL;
+	register_event(s, &evh);
+	cmd.handler = cmdhandler;
+	cmd.data = NULL;
+	register_event(0, &cmd);
+	event_handler();
+
 	return 0;
 }
 int main(int argc, char *argv[])
@@ -268,17 +308,20 @@ int main(int argc, char *argv[])
 	char *node="ubt0hci";
 	int len,addr_valid = 0;
 	bdaddr_t bd;
-	int sflag = 0;
+	int sflag = 0,rflag = 0;
 	int res = -1,handle = -1;
 	uint32_t status;
 	
-	while((ch = getopt(argc, argv, "s") )!= -1){
+	while((ch = getopt(argc, argv, "rs") )!= -1){
 		switch(ch){
 		case 's':
 			sflag = 1;
 			break;
+		case 'r':
+			rflag = 1;
+			break;
 		default:
-			fprintf(stderr, "Usage: %s [-s] bdaddr\n", argv[0]);
+			fprintf(stderr, "Usage: %s [-r] [-s] bdaddr\n", argv[0]);
 			exit(-1);
 			break;
 		}
@@ -294,10 +337,11 @@ int main(int argc, char *argv[])
 	//gap_probe_init(NULL);
 	//uuid_from_string("00000000-0000-1000-8000-00805F9B34FB", &uuid_base, &status);
 	//install_service_name_table();
+	init_event();	
 	if(addr_valid){
-		le_l2connect(&bd, sflag);
+		le_l2connect(&bd, sflag, rflag);
 	}
-	
+
 	return 0;
 }
 	

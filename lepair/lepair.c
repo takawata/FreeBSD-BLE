@@ -171,7 +171,7 @@ int iocapmat[5][5] ={
   {-1, -1, -1, 0, -1}
 };
 
-int le_smpconnect(bdaddr_t *bd,int hci)
+int le_smpconnect(bdaddr_t *bd,int hci, int israndom)
 {
 	struct sockaddr_l2cap l2c;
 	int s;
@@ -193,7 +193,7 @@ int le_smpconnect(bdaddr_t *bd,int hci)
 	l2c.l2cap_family = AF_BLUETOOTH;
 	l2c.l2cap_psm = 0;
 	l2c.l2cap_cid = NG_L2CAP_SMP_CID;
-	l2c.l2cap_bdaddr_type = BDADDR_LE_PUBLIC;
+	l2c.l2cap_bdaddr_type = israndom ? BDADDR_LE_RANDOM : BDADDR_LE_PUBLIC;
 	bcopy(bd, &l2c.l2cap_bdaddr, sizeof(*bd));
 	printf("CONNECT\n");
 	if(connect(s, (struct sockaddr *) &l2c, sizeof(l2c)) == 0){
@@ -233,7 +233,7 @@ int le_smpconnect(bdaddr_t *bd,int hci)
 	    
 	  }while(pres.code != NG_L2CAP_SMP_PAIRRES);
 	  printf("C\n");
-	  printf("%d %d %d %d %d %d %d(%d)\n", pres.code,pres.iocap ,
+	  printf("CODE:%d IOCAP %d %d %d %d %d %d(%d)\n", pres.code,pres.iocap ,
 		 pres.oobflag, pres.authreq,
 		 pres.maxkeysize, pres.ikeydist, pres.rkeydist, sizeof(pres));
 	}
@@ -278,27 +278,30 @@ int le_smpconnect(bdaddr_t *bd,int hci)
 		mrand.code = NG_L2CAP_SMP_PAIRRAND;		
 		smp_c1(k, rval, (uint8_t *)&preq, (uint8_t *)&pres,
 		       (myname.l2cap_bdaddr_type == BDADDR_LE_RANDOM)? 1:0,
-		       &myname.l2cap_bdaddr,  0, bd);
+		       &myname.l2cap_bdaddr,  (israndom) ? 1 : 0, bd);
 		swap128(rval, mconfirm.body);
 		write(s, &mconfirm, sizeof(mconfirm));
 	       
 		res = read(s, &sconfirm, sizeof(sconfirm));
 		printf("%d\n", res);
 		if(sconfirm.code != NG_L2CAP_SMP_PAIRCONF){
-			printf("sconfirm.code %d\n", sconfirm.code);
+			printf("FAILED:sconfirm.code %d\n", sconfirm.code);
 		}
+		sleep(5);
 		write(s, &mrand, sizeof(mrand));
 		res = read(s, &srand, sizeof(srand));
 		printf("%d\n", res);		
 		if(srand.code != NG_L2CAP_SMP_PAIRRAND){
-			printf("srand.code %d\n", srand.code);
+			ng_l2cap_smp_reqres *req;
+			req = (void *)&srand;
+			printf("FAILED:srand.code %d %d\n", req->code, req->reqres);
 			ng = 1;
 			goto fail;
 		}
 		swap128(srand.body, rval);
 		smp_c1(k, rval, (uint8_t *)&preq, (uint8_t *)&pres,
 		       (myname.l2cap_bdaddr_type == BDADDR_LE_RANDOM)? 1:0,
-		       &myname.l2cap_bdaddr,  0, bd);
+		       &myname.l2cap_bdaddr,  israndom ? 1:0, bd);
 		for(i =0; i< 16; i++){
 			printf("%x:%x,", rval[i], sconfirm.body[15-i]);
 			if(rval[i] != sconfirm.body[15-i]){
@@ -353,18 +356,18 @@ int le_smpconnect(bdaddr_t *bd,int hci)
 					}
 					printf("%d %d\n", encok, mok);
 				}
-				printf("EDIV:%x \nRAND",mi.ediv);
+				printf("EDIV:%x \n",mi.ediv);
 				cp.encrypted_diversifier = mi.ediv;
 				cp.random_number = 0;
 				for(i = 0; i < 8 ; i++){
-					printf("%02x ", mi.rand[i]);
 					cp.random_number
 						|= (((uint64_t)mi.rand[i])<<(i*8));
 				}
+				printf("RAND: %lx\n", cp.random_number);
 
-				printf("\nKEY");
+				printf("KEY");
 				for(i = 0 ; i < 16; i++){
-					printf("%02x ", ki.body[i]);
+					printf("0x%02x, ", ki.body[i]);
 					cp.long_term_key[i] = ki.body[i];
 				}
 				printf("\n");
@@ -459,19 +462,38 @@ int main(int argc, char *argv[])
 	char *node="ubt0hci";
 	int len,addr_valid = 0;
 	bdaddr_t bd;
+	int ch;
 	int res = -1,handle = -1;
-
-	if(argc>1){
-	  addr_valid = bt_aton(argv[1],&bd);
+	int addrrandom = 0;
+	
+	while((ch = getopt(argc, argv, "r")) != -1){
+		switch(ch){
+		case 'r':
+			addrrandom = 1;
+			break;
+		default:
+			fprintf(stderr, "Usage: %s [-r] bdaddr\n", argv[0]);
+			exit(-1);
+			break;
+		}
 	}
+
+	argc -= optind;
+	argv += optind;
+	
+	if(argc > 0){
+		addr_valid = bt_aton(argv[0],&bd);
+	}
+	
 	s = open_socket("ubt0hci");
 
 	gethostname(hname, sizeof(hname));
 	len = strlen(hname);
 
 	if(addr_valid){
-	  le_smpconnect(&bd, s);
-	  
+		le_smpconnect(&bd, s, addrrandom);
+	}else{
+		fprintf(stderr, "Address Invalid\n");
 	}
 	
 	return 0;

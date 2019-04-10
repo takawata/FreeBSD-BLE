@@ -31,6 +31,7 @@ struct notify_dispatcher
 {
 	uint16_t handle;
 	int cid;
+	int property;
 	struct service *serv;
 }*dispatcher;
 static int numdispatcher;
@@ -41,9 +42,9 @@ int register_notify(int cid, struct service *serv, int s)
 	struct notify_dispatcher *d;
 	unsigned char buf[50];
 	uuid_t uuid;
-	if(queryhandle == NULL)
-		queryhandle = get_stmt("SELECT handle from ble_attribute INNER JOIN ble_chara ON value_attribute_id = attribute_id where chara_id = $1;");
 
+	if(queryhandle == NULL)
+		queryhandle = get_stmt("SELECT handle,property from ble_attribute INNER JOIN ble_chara ON value_attribute_id = attribute_id where chara_id = $1;");
 	if(queryhandle == NULL){
 		printf("QUERYHANDLE\n" );
 		return -1;
@@ -60,9 +61,12 @@ int register_notify(int cid, struct service *serv, int s)
 	sqlite3_bind_int(queryhandle, 1, cid);
 	sqlite3_step(queryhandle);
 	d->handle = sqlite3_column_int(queryhandle, 0);
+	d->property = sqlite3_column_int(queryhandle, 1);
+
 	sqlite3_reset(queryhandle);
-			
-	buf[0] = 1;
+	
+	buf[0] = ((d->property&GATT_PERM_NOTIFY)?1:0)|
+		((d->property&GATT_PERM_INDICATE)?2:0);
 	buf[1] = 0;
 	btuuid16(0x2902,&uuid);
 	le_char_desc_write(s, cid, &uuid, buf, 2, 0);
@@ -70,7 +74,7 @@ int register_notify(int cid, struct service *serv, int s)
 	return 0;
 }
 
-int notify_handler(unsigned char *buf, int len)
+int notify_handler(unsigned char *buf, int len, int isindicate, int s)
 {
 	int i;
 	struct service *serv;

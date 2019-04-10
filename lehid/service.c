@@ -26,6 +26,14 @@
 #include "service.h"
 #include "att.h"
 
+/*
+ * Linker set process. 
+ * Put driver information structure in ELF section named "driver".
+ * This module process the section and call initialize routine and
+ * register event handlers.
+ */
+
+
 
 static int num_service;
 struct service *service_ent;
@@ -42,17 +50,19 @@ void default_service_init(struct service *service, int s)
 	struct default_service *sc;
 	sc = (struct default_service *)service->sc;
 	uuid_to_string(&sc->uuid, &str, &status );
-	printf("%d\n", status);
 	printf("ID%d: %s\n", service->service_id, str);
 	free(str);
-
+	str = NULL;
+	
 	if(stmt == NULL)
 		stmt = get_stmt("SELECT chara_id,uuid FROM ble_chara WHERE service_id = $1;");
 	sqlite3_bind_int(stmt, 1, service->service_id);
 	while(sqlite3_step(stmt) == SQLITE_ROW){
 		chara_id = sqlite3_column_int(stmt, 0);
 		my_column_uuid(stmt, 1, &uuid);
-		printf("%x %x\n", chara_id, uuid.time_low);
+		uuid_to_string(&uuid, &str, &status );
+		printf("%x %s\n", chara_id, str);
+		free(str);
 	}
 	sqlite3_reset(stmt);
 	return;
@@ -62,6 +72,7 @@ struct service_driver default_driver =
 	.init = &default_service_init,
 	.notify = NULL,
 };
+
 
 
 int attach_service(int s, int device_id )
@@ -98,11 +109,13 @@ int attach_service(int s, int device_id )
 		service_ent[num_service].service_id = service_id;
 		service_ent[num_service].driver = &default_driver;
 		dfs = service_ent[num_service].sc = malloc(sizeof(struct default_service));
-		dfs->uuid = uuid;
+		memcpy(&dfs->uuid, &uuid, sizeof(uuid));
 
 		for(it=&__start_driver; it < &__stop_driver;it++){
 			if(uuid_equal(&it->uuid, &uuid, NULL)){
 				service_ent[num_service].driver = it;
+				free(service_ent[num_service].sc);
+				(service_ent[num_service].sc) = NULL;
 			}
 		}
 		
