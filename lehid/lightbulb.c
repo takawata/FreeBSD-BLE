@@ -26,7 +26,6 @@
 #include "uuidbt.h"
 
 static int num_service;
-struct service *service_ent;
 struct lightbulb_service{
 	uuid_t uuid;
 };
