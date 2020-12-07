@@ -152,6 +152,7 @@ int le_set_scan_enable(int s, int enable)
 	ng_hci_le_set_scan_enable_rp rp;
 	int e,n;
 
+	n = sizeof(rp);
 	cp.le_scan_enable = enable;
 	cp.filter_duplicates = 0;
 	e = hci_request(s, NG_HCI_OPCODE(NG_HCI_OGF_LE,
@@ -199,14 +200,14 @@ int le_read_local_supported_features(int s)
 }
 int le_read_supported_status(int s)
 {
-	ng_hci_le_read_supported_status_rp rp;
+	ng_hci_le_read_supported_states_rp rp;
 	int e;
 	int n = sizeof(rp);
 	e = hci_simple_request(s,
 			       NG_HCI_OPCODE(NG_HCI_OGF_LE,
-					     NG_HCI_OCF_LE_READ_SUPPORTED_STATUS), 
+					     NG_HCI_OCF_LE_READ_SUPPORTED_STATES), 
 			       (void *)&rp, &n);
-	printf("LE_STATUS:%d %d %lx\n", e, rp.status, rp.le_status);
+	printf("LE_STATUS:%d %d %lx\n", e, rp.status, rp.le_states);
 
 	return 0;
 
@@ -570,7 +571,53 @@ void inline swap128(uint8_t *src, uint8_t *dst)
 		dst[i] = src[15-i];
 	}
 }
-	
+
+int le_connect_result(s)
+{
+	char buffer[512];
+	ng_hci_event_pkt_t *e;
+	ng_hci_le_ep *lep;
+	ng_hci_le_connection_complete_ep *cep;
+	int n;
+	char addrstring[50];
+	int err;
+
+	e = (ng_hci_event_pkt_t *)buffer;
+	lep = (ng_hci_le_ep *)(((char *)e)+(sizeof(*e)));
+	cep = (ng_hci_le_connection_complete_ep *)(((char *)lep)+(sizeof(*lep)));
+	n = sizeof(buffer);
+	if((err = hci_recv(s, buffer, &n))==ERROR){
+		printf("RECV Error\n");
+		return 0;
+	}
+	if(n < sizeof(*e)){
+		errno = EMSGSIZE;
+		return 0;
+	}
+	if(e->type != NG_HCI_EVENT_PKT){
+		printf("Event%d\n", e->type);
+		errno = EIO;
+		return 0;
+	}
+	printf("%d\n", lep->subevent_code);
+	if(lep->subevent_code != NG_HCI_LEEV_CON_COMPL){
+		printf("SubEvent%d\n", lep->subevent_code);
+		errno = EIO;
+		return 0;
+	}
+	printf("Connection Event:Status%d, handle%d, role%d, address_type:%d\n",
+	       cep->status, cep->handle, cep->role, cep->address_type);
+	bt_ntoa(&cep->address, addrstring);
+	printf("%s %d %d %d %d\n", addrstring, cep->interval, cep->latency,
+	       cep->supervision_timeout, cep->master_clock_accuracy);
+	if(cep->status != 0){
+		printf("REQUEST ERROR %d\n", cep->status);
+		return 0;
+	}
+
+	return cep->handle;
+}
+
 int le_smpconnect(bdaddr_t *bd,int hci)
 {
 	struct sockaddr_l2cap l2c;
@@ -634,7 +681,7 @@ int le_smpconnect(bdaddr_t *bd,int hci)
 	    
 	  }while(pres.code != NG_L2CAP_SMP_PAIRRES);
 	  printf("C\n");
-	  printf("%d %d %d %d %d %d %d(%d)\n", pres.code,pres.iocap ,
+	  printf("%d %d %d %d %d %d %d(%ld)\n", pres.code,pres.iocap ,
 		 pres.oobflag, pres.authreq,
 		 pres.maxkeysize, pres.ikeydist, pres.rkeydist, sizeof(pres));
 	}
@@ -830,51 +877,6 @@ int le_connect(int s, bdaddr_t *bd)
 	
 }
 
-int le_connect_result(s)
-{
-	char buffer[512];
-	ng_hci_event_pkt_t *e;
-	ng_hci_le_ep *lep;
-	ng_hci_le_connection_complete_ep *cep;
-	int n;
-	char addrstring[50];
-	int err;
-
-	e = (ng_hci_event_pkt_t *)buffer;
-	lep = (ng_hci_le_ep *)(((char *)e)+(sizeof(*e)));
-	cep = (ng_hci_le_connection_complete_ep *)(((char *)lep)+(sizeof(*lep)));
-	n = sizeof(buffer);
-	if((err = hci_recv(s, buffer, &n))==ERROR){
-		printf("RECV Error\n");
-		return 0;
-	}
-	if(n < sizeof(*e)){
-		errno = EMSGSIZE;
-		return 0;
-	}
-	if(e->type != NG_HCI_EVENT_PKT){
-		printf("Event%d\n", e->type);
-		errno = EIO;
-		return 0;
-	}
-	printf("%d\n", lep->subevent_code);
-	if(lep->subevent_code != NG_HCI_LEEV_CON_COMPL){
-		printf("SubEvent%d\n", lep->subevent_code);
-		errno = EIO;
-		return 0;
-	}
-	printf("Connection Event:Status%d, handle%d, role%d, address_type:%d\n",
-	       cep->status, cep->handle, cep->role, cep->address_type);
-	bt_ntoa(&cep->address, addrstring);
-	printf("%s %d %d %d %d\n", addrstring, cep->interval, cep->latency,
-	       cep->supervision_timeout, cep->master_clock_accracy);
-	if(cep->status != 0){
-		printf("REQUEST ERROR %d\n", cep->status);
-		return 0;
-	}
-
-	return cep->handle;
-}
 int request_disconnect(int s, int handle, int reason)
 {
 	ng_hci_discon_cp cp;
