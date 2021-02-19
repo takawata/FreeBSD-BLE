@@ -443,7 +443,7 @@ int le_connect_result(s)
 	       cep->status, cep->handle, cep->role, cep->address_type);
 	bt_ntoa(&cep->address, addrstring);
 	printf("%s %d %d %d %d\n", addrstring, cep->interval, cep->latency,
-	       cep->supervision_timeout, cep->master_clock_accracy);
+	       cep->supervision_timeout, cep->master_clock_accuracy);
 	if(cep->status != 0){
 		printf("REQUEST ERROR %d\n", cep->status);
 		return 0;

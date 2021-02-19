@@ -198,7 +198,7 @@ int le_read_local_supported_features(int s)
 	return 0;
 
 }
-int le_read_supported_status(int s)
+int le_read_supported_states(int s)
 {
 	ng_hci_le_read_supported_states_rp rp;
 	int e;
@@ -206,6 +206,7 @@ int le_read_supported_status(int s)
 	e = hci_simple_request(s,
 			       NG_HCI_OPCODE(NG_HCI_OGF_LE,
 					     NG_HCI_OCF_LE_READ_SUPPORTED_STATES), 
+
 			       (void *)&rp, &n);
 	printf("LE_STATUS:%d %d %lx\n", e, rp.status, rp.le_states);
 
@@ -938,7 +939,7 @@ int main(int argc, char *argv[])
 	memcpy(&buf[5], hname, len);
 	buf[4] = len - 1;
 	le_set_scan_response(s, sizeof(buf), buf);
-	le_read_supported_status(s);
+	le_read_supported_states(s);
 	le_set_scan_enable(s,1);
 	le_scan_result(s);
 	le_set_scan_enable(s,0);
