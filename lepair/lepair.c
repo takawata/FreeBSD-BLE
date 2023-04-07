@@ -195,27 +195,20 @@ int le_smpconnect(bdaddr_t *bd,int hci, int israndom)
 	l2c.l2cap_cid = NG_L2CAP_SMP_CID;
 	l2c.l2cap_bdaddr_type = israndom ? BDADDR_LE_RANDOM : BDADDR_LE_PUBLIC;
 	bcopy(bd, &l2c.l2cap_bdaddr, sizeof(*bd));
-	printf("CONNECT\n");
 	if(connect(s, (struct sockaddr *) &l2c, sizeof(l2c)) == 0){
-	  
-		printf("CONNECTOK\n");		
 	}else{
 	  perror("connect");
 	}
-#if 1
 	do{
 	  handle = le_connect_result(hci);
 	}while(handle==0);
-#endif
 
-	printf("handle%x\n", handle);
 	{
 	  int fl;
 	  fl = fcntl(s, F_GETFL, 0);
 	  fcntl(s, F_SETFL, fl&~O_NONBLOCK);
 	}
 		
-	printf("HOGEHOGE\n");
 	{
 	  preq.code = NG_L2CAP_SMP_PAIRREQ;
 	  preq.iocap = 4;
@@ -229,13 +222,17 @@ int le_smpconnect(bdaddr_t *bd,int hci, int israndom)
 	  do {
 	    int len;
 	    len = read(s, &pres, sizeof(pres));
+#if 0
 	    printf("%d, pi.code %d\n",len, pres.code);
+#endif
 	    
 	  }while(pres.code != NG_L2CAP_SMP_PAIRRES);
+#if 0
 	  printf("C\n");
 	  printf("CODE:%d IOCAP %d %d %d %d %d %d(%d)\n", pres.code,pres.iocap ,
 		 pres.oobflag, pres.authreq,
 		 pres.maxkeysize, pres.ikeydist, pres.rkeydist, sizeof(pres));
+#endif
 	}
 
 	{
@@ -244,8 +241,6 @@ int le_smpconnect(bdaddr_t *bd,int hci, int israndom)
 		if(getsockname(s, (struct sockaddr *)&myname,&siz)!=0){
 			perror("getsockname");
 		}
-		printf("%d\n", myname.l2cap_bdaddr_type);
-		printf("%s\n", bt_ntoa(&myname.l2cap_bdaddr, NULL));
 	}
 	{
 		ng_l2cap_smp_keyinfo mrand,mconfirm,srand,sconfirm;
@@ -283,14 +278,12 @@ int le_smpconnect(bdaddr_t *bd,int hci, int israndom)
 		write(s, &mconfirm, sizeof(mconfirm));
 	       
 		res = read(s, &sconfirm, sizeof(sconfirm));
-		printf("%d\n", res);
 		if(sconfirm.code != NG_L2CAP_SMP_PAIRCONF){
 			printf("FAILED:sconfirm.code %d\n", sconfirm.code);
 		}
 		sleep(5);
 		write(s, &mrand, sizeof(mrand));
 		res = read(s, &srand, sizeof(srand));
-		printf("%d\n", res);		
 		if(srand.code != NG_L2CAP_SMP_PAIRRAND){
 			ng_l2cap_smp_reqres *req;
 			req = (void *)&srand;
@@ -303,7 +296,6 @@ int le_smpconnect(bdaddr_t *bd,int hci, int israndom)
 		       (myname.l2cap_bdaddr_type == BDADDR_LE_RANDOM)? 1:0,
 		       &myname.l2cap_bdaddr,  israndom ? 1:0, bd);
 		for(i =0; i< 16; i++){
-			printf("%x:%x,", rval[i], sconfirm.body[15-i]);
 			if(rval[i] != sconfirm.body[15-i]){
 				ng = 1;
 				goto fail;
@@ -330,7 +322,6 @@ int le_smpconnect(bdaddr_t *bd,int hci, int israndom)
 			hci_request(hci, NG_HCI_OPCODE(NG_HCI_OGF_LE
 				     ,NG_HCI_OCF_LE_START_ENCRYPTION),
 				    (char *)&cp, sizeof(cp), (char *)&rp, &n);
-			printf("LE_ENC OK\n");
 			{
 				ng_l2cap_smp_keyinfo ki;
 				ng_l2cap_smp_masterinfo mi;
@@ -342,7 +333,6 @@ int le_smpconnect(bdaddr_t *bd,int hci, int israndom)
 				
 				while(encok==0||mok==0){
 					read(s, pkt, sizeof(pkt));
-					printf("%d\n", pkt[0]);
 					switch(pkt[0]){
 					case NG_L2CAP_SMP_MASTERINFO:
 						mok=1;
@@ -354,23 +344,29 @@ int le_smpconnect(bdaddr_t *bd,int hci, int israndom)
 						break;
 						
 					}
-					printf("%d %d\n", encok, mok);
 				}
-				printf("EDIV:%x \n",mi.ediv);
+				printf("device{\n");
+				printf("\tname \"thisdevice\";\n ");
+				printf("\tbdaddr %s;\n", bt_ntoa(bd, NULL));
+				printf("\taddrtype %s;\n", (israndom)?
+				       "lernd":"lepub");
+				printf("\tediv 0x%04x;\n",mi.ediv);
 				cp.encrypted_diversifier = mi.ediv;
 				cp.random_number = 0;
 				for(i = 0; i < 8 ; i++){
 					cp.random_number
 						|= (((uint64_t)mi.rand[i])<<(i*8));
 				}
-				printf("RAND: %lx\n", cp.random_number);
+				printf("\trand 0x%lx;\n", cp.random_number);
 
-				printf("KEY");
+				printf("\tkey 0x");
 				for(i = 0 ; i < 16; i++){
-					printf("0x%02x, ", ki.body[i]);
+					printf("%02x", ki.body[i]);
 					cp.long_term_key[i] = ki.body[i];
 				}
-				printf("\n");
+				printf(";\n");
+				printf("\tpin nopin;\n");
+				printf("}\n");
 				arc4random_buf(ki.body, sizeof(ki.body));
 				ki.code = NG_L2CAP_SMP_ENCINFO;
 				write(s, &ki, sizeof(ki));
@@ -433,17 +429,21 @@ int le_connect_result(s)
 		errno = EIO;
 		return 0;
 	}
-	printf("%d\n", lep->subevent_code);
+	//printf("%d\n", lep->subevent_code);
 	if(lep->subevent_code != NG_HCI_LEEV_CON_COMPL){
+#if 0
 		printf("SubEvent%d\n", lep->subevent_code);
 		errno = EIO;
+#endif
 		return 0;
 	}
+#if 0
 	printf("Connection Event:Status%d, handle%d, role%d, address_type:%d\n",
 	       cep->status, cep->handle, cep->role, cep->address_type);
 	bt_ntoa(&cep->address, addrstring);
 	printf("%s %d %d %d %d\n", addrstring, cep->interval, cep->latency,
 	       cep->supervision_timeout, cep->master_clock_accuracy);
+#endif
 	if(cep->status != 0){
 		printf("REQUEST ERROR %d\n", cep->status);
 		return 0;
