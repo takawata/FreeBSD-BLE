@@ -24,6 +24,7 @@
 #include "service.h"
 #include "att.h"
 #include "uuidbt.h"
+#include "notify.h"
 
 extern uuid_t uuid_base;
 struct pasori_service{
