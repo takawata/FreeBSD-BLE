@@ -547,7 +547,8 @@ static int smp_c1(uint8_t *k, uint8_t *r, uint8_t *preq,
 	
 	return 0;
 }
-int smp_c1_unittest()
+
+static int smp_c1_unittest()
 {
   int i;
   uint8_t tpq[7] = {0x01, 0x01, 0x00, 0x00, 0x10, 0x07, 0x07};
@@ -565,7 +566,8 @@ int smp_c1_unittest()
   printf("\n");
   return 0;
 }
-void inline swap128(uint8_t *src, uint8_t *dst)
+
+static inline void swap128(uint8_t *src, uint8_t *dst)
 {
 	int i;
 	for(i=0;i < 16; i++){
@@ -573,7 +575,7 @@ void inline swap128(uint8_t *src, uint8_t *dst)
 	}
 }
 
-int le_connect_result(s)
+static int le_connect_result(int s)
 {
 	char buffer[512];
 	ng_hci_event_pkt_t *e;
