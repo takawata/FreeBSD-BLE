@@ -359,6 +359,32 @@ midi_parse_byte_sub(struct snd_seq_event *ev, struct midi_parse *parse, uint8_t 
 	}
 	return (true);
 }
+static void midi_dump_event(struct snd_seq_event *ev)
+{
+	printf("Type: %d\n", ev->type);
+	switch(ev->type){
+	case SND_SEQ_EVENT_NOTEON:
+	case SND_SEQ_EVENT_NOTEOFF:
+	case SND_SEQ_EVENT_KEYPRESS:
+		printf("Ch:%d Note:%d Velocity%d \n",
+		       ev->data.note.channel,
+		       ev->data.note.note,
+		       ev->data.note.velocity);
+		break;
+	case SND_SEQ_EVENT_PGMCHANGE:
+	case SND_SEQ_EVENT_CHANPRESS:
+	case SND_SEQ_EVENT_PITCHBEND:
+	case SND_SEQ_EVENT_CONTROLLER:
+	case SND_SEQ_EVENT_QFRAME:
+	case SND_SEQ_EVENT_SONGSEL:
+	case SND_SEQ_EVENT_SONGPOS:
+		printf("Ch %d, Param %d, Value %d\n",
+		       ev->data.control.channel,
+		       ev->data.control.param,
+		       ev->data.control.value);
+		break;
+	}
+}
 
 static void
 midi_parse_byte(snd_seq_t *seq, struct midi_parse *parse, uint8_t data)
@@ -369,8 +395,12 @@ midi_parse_byte(snd_seq_t *seq, struct midi_parse *parse, uint8_t data)
 		snd_seq_ev_set_source(&temp, 0);
 		snd_seq_ev_set_subs(&temp);
 		snd_seq_ev_set_direct(&temp);
-		snd_seq_event_output(seq, &temp);
-		snd_seq_drain_output(seq);
+		if(seq != NULL) {
+			snd_seq_event_output(seq, &temp);
+			snd_seq_drain_output(seq);
+		} else {
+			midi_dump_event(&temp);
+		}
 	}
 }
 static int  midi_get_status_datacount(uint8_t sts)
@@ -449,6 +479,8 @@ midi_notify(void *sc, int charid, uint8_t *buf, size_t len)
 				printf("ERROR\n");
 				return ;
 			}
+			if(ms->midi_seq == NULL)
+				printf("TIME %x\n" ,timestamp);
 			break;
 		case GETSTS:
 			assert((buf[start] & 0x80));
@@ -526,21 +558,22 @@ midi_init(struct service *service, int s)
 
 	if (snd_seq_open(&serv->midi_seq, "default", SND_SEQ_OPEN_DUPLEX, 0)) {
 		printf("Cannot open ALSA MIDI control device\n");
-		goto error;
 	}
 
-	/* set non-blocking mode for event handler */
-	snd_seq_nonblock(serv->midi_seq, 1);
+	if(serv->midi_seq != NULL){
+		/* set non-blocking mode for event handler */
+		snd_seq_nonblock(serv->midi_seq, 1);
 
-	/* XXX could query a better device name */
-	snd_seq_set_client_name(serv->midi_seq, "lehid");
+		/* XXX could query a better device name */
+		snd_seq_set_client_name(serv->midi_seq, "lehid");
 
-	/* read only for now */
-	snd_seq_create_simple_port(serv->midi_seq, "BLE MIDI",
-	    SND_SEQ_PORT_CAP_READ |
-	    SND_SEQ_PORT_CAP_SUBS_READ,
-	    SND_SEQ_PORT_TYPE_MIDI_GENERIC |
-	    SND_SEQ_PORT_TYPE_APPLICATION);
+		/* read only for now */
+		snd_seq_create_simple_port(serv->midi_seq, "BLE MIDI",
+					   SND_SEQ_PORT_CAP_READ |
+					   SND_SEQ_PORT_CAP_SUBS_READ,
+					   SND_SEQ_PORT_TYPE_MIDI_GENERIC |
+					   SND_SEQ_PORT_TYPE_APPLICATION);
+	}
 
 	service->sc = serv;
 
