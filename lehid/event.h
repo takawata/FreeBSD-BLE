@@ -6,5 +6,6 @@ struct eventhandler{
 
 int init_event();
 int register_event(int s, struct eventhandler *evh);
+int deregister_event(int s);
 int event_handler();
 

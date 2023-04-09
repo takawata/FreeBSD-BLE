@@ -24,6 +24,8 @@
 #include "service.h"
 #include "att.h"
 #include "uuidbt.h"
+#include "notify.h"
+
 static void microbit_temp_notify(void *sc, int charid, unsigned char *buf, size_t len);
 static void microbit_temp_init(struct service *service, int s);
 struct microbit_temp_service

@@ -24,6 +24,8 @@
 #include "service.h"
 #include "att.h"
 #include "uuidbt.h"
+#include "notify.h"
+
 static void microbit_mag_notify(void *sc, int charid, unsigned char *buf, size_t len);
 static void microbit_mag_init(struct service *service, int s);
 struct microbit_mag_service
@@ -54,7 +56,7 @@ static void microbit_mag_notify(void *sc, int charid, unsigned char *buf, size_t
 			printf("%02x ", buf[i]);
 		}
 		printf("\n");
-		printf("LEN %dMag X:%d Y%d Z%d\n",len, x,y,z);
+		printf("LEN %zu Mag X:%d Y%d Z%d\n",len, x,y,z);
 	}else if(charid == serv->bear_cid){
 		b = buf[2]|(buf[3]<<8);
 		printf("Bear %d\n", b);

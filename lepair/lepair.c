@@ -53,7 +53,9 @@
 
 int timeout = 30;
 
-int open_socket(char *node)
+static int le_connect_result(int s);
+
+static int open_socket(char *node)
 {
 	struct sockaddr_hci                      addr;  
 	int s;
@@ -399,9 +401,7 @@ int le_smpconnect(bdaddr_t *bd,int hci, int israndom)
 	return 0;
 }
 
-
-
-int le_connect_result(s)
+static int le_connect_result(int s)
 {
 	char buffer[512];
 	ng_hci_event_pkt_t *e;
