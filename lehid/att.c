@@ -94,11 +94,11 @@ int le_read_one(int s,unsigned char *buf,size_t buflen)
 		}
 		break;
 	case ATT_OP_NOTIFY:
-		notify_handler(buf+1, len, 0, s);
+		notify_handler(buf+1, len - 1, 0, s);
 		ret = -2;
 		break;
 	case ATT_OP_INDICATE:
-		notify_handler(buf+1, len, 1, s);
+		notify_handler(buf+1, len - 1, 1, s);
 		ret = -2;
 		break;
 		
