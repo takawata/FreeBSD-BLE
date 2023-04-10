@@ -74,6 +74,7 @@ struct midi_parse {
 struct midi_service {
 	snd_seq_t *midi_seq;
 	struct midi_parse parse;
+	int insysex;
 };
 
 static void midi_init(struct service *service, int s);
@@ -372,67 +373,144 @@ midi_parse_byte(snd_seq_t *seq, struct midi_parse *parse, uint8_t data)
 		snd_seq_drain_output(seq);
 	}
 }
+static int  midi_get_status_datacount(uint8_t sts)
+{
+	switch(sts&0xf0){
+	case 0x80:
+	case 0x90:
+	case 0xa0:
+	case 0xb0:
+	case 0xe0:
+		return 2;
+	case 0xc0:
+	case 0xd0:
+		return 1;
+		break;
+	case 0xf0:
+		switch(sts){
+		case 0xf2:
+			return 2;
+		case 0xf1:
+		case 0xf3:
+			return 1;
+		}
+	default:
+		return 0;
+	}
+	return  0;
+}
 
 static void
 midi_notify(void *sc, int charid, uint8_t *buf, size_t len)
 {
 	struct midi_service *ms = sc;
-	uint8_t lastStatus;
-	size_t start = 2;
+	uint8_t runningStatus = 0 ;
+	size_t start = 3;
 	size_t stop;
+	int header = buf[2];
+	int16_t timestamp;
+	enum {
+		SYSEX,
+		TIMESTAMP,
+		GETSTS,
+		DATA,
+	}statm;
 
-	while (start < len) {
-		lastStatus = buf[start];
+	statm = TIMESTAMP;
+	if( (header & 0x80 ) == 0){
+		printf("Error\n");
+		return ;
+	}
+	if(ms->insysex){
+		statm = SYSEX;
+	}
 
-		/* check MSB is set to one, as required per MIDI specification */
-		if(buf[start] < 0x80)
+	while(start < len){
+		switch(statm){
+		case SYSEX:
+			midi_parse_byte(ms->midi_seq,
+					&ms->parse, buf[start]);
+			start ++;
+			if(buf[start] &0x80)
+				statm = TIMESTAMP;
 			break;
-
-		/* find next MIDI command, if any */
-		for (stop = start; (stop < len - 1) && (buf[stop + 1] < 0x80); stop++)
-			;
-
-		switch (stop - start) {
-		case 0:
-			midi_parse_byte(ms->midi_seq, &ms->parse, lastStatus);
+		case TIMESTAMP:
+			if((buf[start]& 0x80) == 0){
+				printf("Error\n");
+			}
+			timestamp = (header &0x3f)<<7;
+			timestamp |= (buf[start] & 0x7f);
+			start ++;
+			if(buf[start] & 0x80){
+				statm = GETSTS;
+			}else if(runningStatus){
+				statm = DATA;
+			}else{
+				printf("ERROR\n");
+				return ;
+			}
 			break;
-		case 1:
-			midi_parse_byte(ms->midi_seq, &ms->parse, lastStatus);
-			midi_parse_byte(ms->midi_seq, &ms->parse, buf[start + 1]);
-			break;
-		case 2:
-			midi_parse_byte(ms->midi_seq, &ms->parse, lastStatus);
-			midi_parse_byte(ms->midi_seq, &ms->parse, buf[start + 1]);
-			midi_parse_byte(ms->midi_seq, &ms->parse, buf[start + 2]);
-			break;
-		default:
-			/* running status case */
-			switch (buf[start] & 0xF0) {
-			case 0x80:
-			case 0x90:
-			case 0xA0:
-			case 0xB0:
-			case 0xE0:
-				for (size_t i = start; i + 1 < stop; i = i + 2) {
-					midi_parse_byte(ms->midi_seq, &ms->parse, lastStatus);
-					midi_parse_byte(ms->midi_seq, &ms->parse, buf[i + 1]);
-					midi_parse_byte(ms->midi_seq, &ms->parse, buf[i + 2]);
-				}
-				break;
-			case 0xC0:
-			case 0xD0:
-				for(size_t i = start; i < stop; i = i + 1) {
-					midi_parse_byte(ms->midi_seq, &ms->parse, lastStatus);
-					midi_parse_byte(ms->midi_seq, &ms->parse, buf[i + 1]);
-				}
-				break;
-			default:
+		case GETSTS:
+			assert((buf[start] & 0x80));
+			if ((buf[start] & 0xf0 ) != 0xf0){
+				runningStatus = buf[start++];
+				statm = DATA;
 				break;
 			}
+			if(buf[start] == 0xf0){
+				ms->insysex = 1;
+				midi_parse_byte(ms->midi_seq,
+						&ms->parse,
+						buf[start]);
+				start ++;
+				statm = SYSEX;
+				break;
+			} else if(buf[start] == 0xf7){
+				ms->insysex = 0;
+				midi_parse_byte(ms->midi_seq,
+						&ms->parse,
+						buf[start]);
+				start ++;
+				statm = TIMESTAMP;
+				break;
+			} else {
+				int dc = midi_get_status_datacount(buf[start]);
+				midi_parse_byte(ms->midi_seq, &ms->parse,
+						buf[start++]);
+				for(int i = 0; i < dc ;i++){
+					midi_parse_byte(ms->midi_seq,
+							&ms->parse,
+							buf[start++]);
+				}
+				if (buf[start] &0x80)
+				{
+					statm = TIMESTAMP;
+				} else if (runningStatus){
+					statm = DATA;
+				} else {
+					printf("ERROR\n");
+					return;
+				}
+				break;
+			}
+		case DATA:
+		{
+			int dc = midi_get_status_datacount(runningStatus);
+			midi_parse_byte(ms->midi_seq,
+					&ms->parse,
+					runningStatus);
+			for(int i = 0 ; i < dc ; i++){
+				midi_parse_byte(ms->midi_seq,
+						&ms->parse,
+						buf[start++]);
+			}
+			if(buf[start] & 0x80){
+				statm = TIMESTAMP;
+			}
+			break;
 		}
-
-		/* advance start offset */
-		start = stop + 2;
+		
+		}
 	}
 }
 
