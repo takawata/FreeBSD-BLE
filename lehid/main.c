@@ -49,7 +49,6 @@
 #include <uuid.h>
 #define L2CAP_SOCKET_CHECKED
 #include <bluetooth.h>
-#include "hccontrol.h"
 #include "gatt.h"
 #include "uuidbt.h"
 #include <sqlite3.h>
