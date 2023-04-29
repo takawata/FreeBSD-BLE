@@ -311,8 +311,11 @@ int main(int argc, char *argv[])
 	int res = -1,handle = -1;
 	uint32_t status;
 	
-	while((ch = getopt(argc, argv, "rs") )!= -1){
+	while((ch = getopt(argc, argv, "n:rs") )!= -1){
 		switch(ch){
+		case 'n':
+			node = optarg;
+			break;
 		case 's':
 			sflag = 1;
 			break;
@@ -320,7 +323,7 @@ int main(int argc, char *argv[])
 			rflag = 1;
 			break;
 		default:
-			fprintf(stderr, "Usage: %s [-r] [-s] bdaddr\n", argv[0]);
+			fprintf(stderr, "Usage: %s [-r] [-s] [-n <ubt0hci>] bdaddr\n", argv[0]);
 			exit(-1);
 			break;
 		}
