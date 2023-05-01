@@ -23,7 +23,6 @@ SRCS+= notify.c
 SRCS+= omron_sensor.c
 SRCS+= pasori.c
 SRCS+= rcs.c
-SRCS+= send_recv.c
 SRCS+= service.c
 SRCS+= servicename.c
 SRCS+= sql.c

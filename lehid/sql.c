@@ -19,7 +19,6 @@
 #define L2CAP_SOCKET_CHECKED
 #include <bluetooth.h>
 #include <sqlite3.h>
-#include "hccontrol.h"
 #include "gatt.h"
 #include <getopt.h>
 #include "sql.h"
